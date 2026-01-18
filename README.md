@@ -1,6 +1,22 @@
-# Rippr
+<p align="center">
+  <img src="assets/logo.png" alt="Rippr Logo" width="128" height="128">
+</p>
 
-A desktop app for downloading audio samples from YouTube, SoundCloud, Bandcamp, and other sources. Built for beat makers who need quick access to samples with proper metadata.
+<h1 align="center">Rippr</h1>
+
+<p align="center">
+  <strong>A desktop app for downloading audio samples from YouTube, SoundCloud, Bandcamp, and other sources.</strong><br>
+  Built for beat makers who need quick access to samples with proper metadata.
+</p>
+
+<p align="center">
+  <a href="https://github.com/iheanyi/rippr/releases">Download</a> •
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#usage">Usage</a>
+</p>
+
+---
 
 ## Features
 
