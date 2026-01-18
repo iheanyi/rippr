@@ -19,12 +19,13 @@ A desktop app for downloading audio samples from YouTube, SoundCloud, Bandcamp, 
 
 Download the latest release for your platform from the [Releases](https://github.com/iheanyi/rippr/releases) page.
 
+**Zero dependencies** - Just download and run. Python, yt-dlp, and ffmpeg are all bundled.
+
 ### Build from source
 
 **Prerequisites:**
 - Node.js 18+
 - Rust 1.70+
-- Python 3.8+ with yt-dlp (`pip install yt-dlp`)
 
 ```bash
 # Clone the repo
@@ -34,8 +35,8 @@ cd rippr
 # Install dependencies
 npm install
 
-# Install yt-dlp
-pip install yt-dlp
+# Bundle Python with yt-dlp (one-time setup)
+./scripts/bundle-python.sh
 
 # Download ffmpeg binaries for bundling
 ./scripts/download-ffmpeg.sh
@@ -47,14 +48,14 @@ npm run tauri dev
 npm run tauri build
 ```
 
-**Note:** ffmpeg is bundled with the release builds - users don't need to install it separately.
+**Note:** Release builds are fully self-contained - Python, yt-dlp, and ffmpeg are all bundled.
 
 ## Tech Stack
 
 - **Frontend**: React + TypeScript + Vite
 - **Backend**: Rust + Tauri 2.0
 - **Audio**: Symphonia (decoding) + mp3lame-encoder (encoding)
-- **Downloads**: yt-dlp via PyO3
+- **Downloads**: yt-dlp (bundled Python + subprocess)
 - **Database**: SQLite (rusqlite)
 
 ## Usage
