@@ -36,6 +36,9 @@
     "externalBin": [
       "binaries/ffmpeg",
       "binaries/ffprobe"
+    ],
+    "resources": [
+      "resources/python/**/*"
     ]
   },
   "plugins": {

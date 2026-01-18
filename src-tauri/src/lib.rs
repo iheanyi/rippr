@@ -99,31 +99,51 @@ impl std::fmt::Display for DownloadError {
 
 static PYTHON_INIT: Once = Once::new();
 
-/// Initialize Python environment - looks for bundled Python or falls back to system Python
+/// Initialize Python environment - adds bundled site-packages to PYTHONPATH
+/// Note: PyO3 uses system Python's libpython (compiled against it), so we only
+/// add our bundled site-packages (yt-dlp) to PYTHONPATH, not override PYTHONHOME
 fn init_python_env() {
     PYTHON_INIT.call_once(|| {
-        // Try to find bundled Python in the app resources
+        // Try to find bundled Python site-packages in the app resources
         if let Some(resource_dir) = get_resource_dir() {
-            let python_dir = resource_dir.join("python");
-            if python_dir.exists() {
-                // Set environment variables for bundled Python
-                std::env::set_var("PYTHONHOME", &python_dir);
+            // In production, Tauri puts resources in a 'resources' subdirectory
+            let python_dir = {
+                let nested_path = resource_dir.join("resources").join("python");
+                if nested_path.exists() {
+                    nested_path
+                } else {
+                    resource_dir.join("python")
+                }
+            };
 
-                // Find the lib directory (e.g., lib/python3.12)
+            if python_dir.exists() {
                 let lib_dir = python_dir.join("lib");
+
+                // Find the python version directory (e.g., python3.13)
                 if let Ok(entries) = std::fs::read_dir(&lib_dir) {
                     for entry in entries.flatten() {
                         let name = entry.file_name();
-                        if name.to_string_lossy().starts_with("python3") {
-                            let python_lib = lib_dir.join(&name);
-                            std::env::set_var("PYTHONPATH", &python_lib);
+                        if name.to_string_lossy().starts_with("python3") && entry.path().is_dir() {
+                            let site_packages = lib_dir.join(&name).join("site-packages");
+
+                            if site_packages.exists() {
+                                // Only add site-packages to PYTHONPATH - don't override PYTHONHOME
+                                // This lets PyO3 use system Python's stdlib while using our bundled packages
+                                let current_path = std::env::var("PYTHONPATH").unwrap_or_default();
+                                let new_path = if current_path.is_empty() {
+                                    site_packages.to_string_lossy().to_string()
+                                } else {
+                                    format!("{}:{}", site_packages.to_string_lossy(), current_path)
+                                };
+                                std::env::set_var("PYTHONPATH", &new_path);
+
+                                println!("Added bundled site-packages to PYTHONPATH: {:?}", site_packages);
+                                return;
+                            }
                             break;
                         }
                     }
                 }
-
-                println!("Using bundled Python from: {:?}", python_dir);
-                return;
             }
         }
 
@@ -164,7 +184,7 @@ fn get_resource_dir() -> Option<PathBuf> {
 fn get_ffmpeg_path() -> Option<PathBuf> {
     let exe_path = std::env::current_exe().ok()?;
 
-    // Determine the target triple suffix based on the current platform
+    // Determine the target triple suffix based on the current platform (for dev mode)
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     let suffix = "aarch64-apple-darwin";
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
@@ -174,17 +194,22 @@ fn get_ffmpeg_path() -> Option<PathBuf> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let suffix = "x86_64-unknown-linux-gnu";
 
-    // In production macOS app bundle
+    // In production macOS app bundle - Tauri strips the suffix when bundling
     if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
-        let ffmpeg_path = exe_path
-            .parent()? // MacOS
-            .join(format!("ffmpeg-{}", suffix));
+        let macos_dir = exe_path.parent()?;
+        // Try without suffix first (how Tauri bundles it)
+        let ffmpeg_path = macos_dir.join("ffmpeg");
+        if ffmpeg_path.exists() {
+            return Some(ffmpeg_path);
+        }
+        // Fall back to with suffix (just in case)
+        let ffmpeg_path = macos_dir.join(format!("ffmpeg-{}", suffix));
         if ffmpeg_path.exists() {
             return Some(ffmpeg_path);
         }
     }
 
-    // Development mode: check in binaries folder
+    // Development mode: check in binaries folder (with suffix)
     let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("binaries")
         .join(format!("ffmpeg-{}", suffix));
@@ -1460,9 +1485,26 @@ async fn update_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
     // Emit progress
     let _ = app.emit("ytdlp-update-progress", "Starting update...");
 
+    // Try to use bundled Python's pip first, fall back to system pip
+    let (pip_cmd, pip_args): (&str, Vec<&str>) = if let Some(resource_dir) = get_resource_dir() {
+        let python_dir = resource_dir.join("python");
+        let pip_path = python_dir.join("bin").join("pip3");
+        if pip_path.exists() {
+            // Use bundled Python's pip
+            let pip_str = pip_path.to_string_lossy().to_string();
+            // We need to leak this string because Command needs a &str that lives long enough
+            let pip_static: &'static str = Box::leak(pip_str.into_boxed_str());
+            (pip_static, vec!["install", "--upgrade", "yt-dlp"])
+        } else {
+            ("pip3", vec!["install", "--upgrade", "yt-dlp"])
+        }
+    } else {
+        ("pip3", vec!["install", "--upgrade", "yt-dlp"])
+    };
+
     // Run pip install --upgrade yt-dlp
-    let output = Command::new("pip3")
-        .args(["install", "--upgrade", "yt-dlp"])
+    let output = Command::new(pip_cmd)
+        .args(&pip_args)
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
 

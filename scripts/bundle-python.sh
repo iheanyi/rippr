@@ -7,21 +7,23 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 RESOURCES_DIR="$PROJECT_ROOT/src-tauri/resources"
-PYTHON_VERSION="3.12.8"
+# Must match the system Python version that PyO3 compiles against
+PYTHON_VERSION="3.13.1"
+RELEASE_DATE="20250115"
 
-# Detect platform
+# Detect platform - use install_only (not stripped) to keep C extension modules
 case "$(uname -s)-$(uname -m)" in
     Darwin-arm64)
         PLATFORM="aarch64-apple-darwin"
-        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241219/cpython-${PYTHON_VERSION}+20241219-${PLATFORM}-install_only_stripped.tar.gz"
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${RELEASE_DATE}/cpython-${PYTHON_VERSION}+${RELEASE_DATE}-${PLATFORM}-install_only.tar.gz"
         ;;
     Darwin-x86_64)
         PLATFORM="x86_64-apple-darwin"
-        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241219/cpython-${PYTHON_VERSION}+20241219-${PLATFORM}-install_only_stripped.tar.gz"
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${RELEASE_DATE}/cpython-${PYTHON_VERSION}+${RELEASE_DATE}-${PLATFORM}-install_only.tar.gz"
         ;;
     Linux-x86_64)
         PLATFORM="x86_64-unknown-linux-gnu"
-        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/20241219/cpython-${PYTHON_VERSION}+20241219-${PLATFORM}-install_only_stripped.tar.gz"
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${RELEASE_DATE}/cpython-${PYTHON_VERSION}+${RELEASE_DATE}-${PLATFORM}-install_only.tar.gz"
         ;;
     *)
         echo "Unsupported platform: $(uname -s)-$(uname -m)"
@@ -74,4 +76,4 @@ echo "Bundled Python location: $PYTHON_DIR"
 echo ""
 echo "To use this in development, set these environment variables:"
 echo "  export PYTHONHOME=$PYTHON_DIR"
-echo "  export PYTHONPATH=$PYTHON_DIR/lib/python3.12"
+echo "  export PYTHONPATH=$PYTHON_DIR/lib/python3.13"
