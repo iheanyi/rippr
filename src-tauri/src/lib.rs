@@ -1,14 +1,13 @@
 use id3::TagLike;
 use mp3lame_encoder::{Builder, FlushNoGap, InterleavedPcm};
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::mem::MaybeUninit;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, Once};
+use std::sync::Mutex;
 use tauri::Emitter;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -97,59 +96,34 @@ impl std::fmt::Display for DownloadError {
     }
 }
 
-static PYTHON_INIT: Once = Once::new();
-
-/// Initialize Python environment - adds bundled site-packages to PYTHONPATH
-/// Note: PyO3 uses system Python's libpython (compiled against it), so we only
-/// add our bundled site-packages (yt-dlp) to PYTHONPATH, not override PYTHONHOME
-fn init_python_env() {
-    PYTHON_INIT.call_once(|| {
-        // Try to find bundled Python site-packages in the app resources
-        if let Some(resource_dir) = get_resource_dir() {
-            // In production, Tauri puts resources in a 'resources' subdirectory
-            let python_dir = {
-                let nested_path = resource_dir.join("resources").join("python");
-                if nested_path.exists() {
-                    nested_path
-                } else {
-                    resource_dir.join("python")
-                }
-            };
-
-            if python_dir.exists() {
-                let lib_dir = python_dir.join("lib");
-
-                // Find the python version directory (e.g., python3.13)
-                if let Ok(entries) = std::fs::read_dir(&lib_dir) {
-                    for entry in entries.flatten() {
-                        let name = entry.file_name();
-                        if name.to_string_lossy().starts_with("python3") && entry.path().is_dir() {
-                            let site_packages = lib_dir.join(&name).join("site-packages");
-
-                            if site_packages.exists() {
-                                // Only add site-packages to PYTHONPATH - don't override PYTHONHOME
-                                // This lets PyO3 use system Python's stdlib while using our bundled packages
-                                let current_path = std::env::var("PYTHONPATH").unwrap_or_default();
-                                let new_path = if current_path.is_empty() {
-                                    site_packages.to_string_lossy().to_string()
-                                } else {
-                                    format!("{}:{}", site_packages.to_string_lossy(), current_path)
-                                };
-                                std::env::set_var("PYTHONPATH", &new_path);
-
-                                println!("Added bundled site-packages to PYTHONPATH: {:?}", site_packages);
-                                return;
-                            }
-                            break;
-                        }
-                    }
-                }
+/// Get the path to the bundled Python binary
+fn get_bundled_python_path() -> Option<PathBuf> {
+    // Try to find bundled Python in the app resources
+    if let Some(resource_dir) = get_resource_dir() {
+        // In production, Tauri puts resources in a 'resources' subdirectory
+        let python_dir = {
+            let nested_path = resource_dir.join("resources").join("python");
+            if nested_path.exists() {
+                nested_path
+            } else {
+                resource_dir.join("python")
             }
-        }
+        };
 
-        // Fall back to system Python (for development)
+        let python_bin = python_dir.join("bin").join("python3");
+        if python_bin.exists() {
+            println!("Using bundled Python from: {:?}", python_bin);
+            return Some(python_bin);
+        }
+    }
+
+    // Fall back: check if python3 is in PATH (for development)
+    if Command::new("python3").arg("--version").output().is_ok() {
         println!("Using system Python");
-    });
+        return Some(PathBuf::from("python3"));
+    }
+
+    None
 }
 
 /// Get the app's resource directory
@@ -276,101 +250,78 @@ struct YtDlpMetadata {
     duration: Option<f64>,
 }
 
-/// Fetch video metadata using yt-dlp via PyO3
+/// Fetch video metadata using yt-dlp via subprocess
 fn ytdlp_extract_info(url: &str) -> Result<YtDlpMetadata, String> {
-    init_python_env();
-    Python::with_gil(|py| {
-        let yt_dlp = py.import("yt_dlp").map_err(|e| format!("Failed to import yt_dlp: {}", e))?;
+    let python_path = get_bundled_python_path()
+        .ok_or_else(|| "Python not found. Please install Python 3.".to_string())?;
 
-        // Create options dict
-        let opts = PyDict::new(py);
-        opts.set_item("quiet", true).unwrap();
-        opts.set_item("no_warnings", true).unwrap();
-        opts.set_item("extract_flat", false).unwrap();
-        opts.set_item("noplaylist", true).unwrap();
+    // Run: python -m yt_dlp -j --no-playlist URL
+    let output = Command::new(&python_path)
+        .args(["-m", "yt_dlp", "-j", "--no-playlist", "--no-warnings", url])
+        .output()
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
 
-        // Create YoutubeDL instance
-        let ydl_class = yt_dlp.getattr("YoutubeDL").map_err(|e| format!("Failed to get YoutubeDL: {}", e))?;
-        let ydl = ydl_class.call1((opts,)).map_err(|e| format!("Failed to create YoutubeDL: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("yt-dlp failed: {}", stderr));
+    }
 
-        // Extract info without downloading
-        let info = ydl.call_method1("extract_info", (url, false))
-            .map_err(|e| format!("Failed to extract info: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-        // Helper to extract optional string field
-        fn get_str(info: &Bound<'_, PyAny>, key: &str) -> Option<String> {
-            info.get_item(key).ok().and_then(|v| {
-                if v.is_none() { None } else { v.extract().ok() }
-            })
-        }
+    // Parse JSON output
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse yt-dlp output: {}", e))?;
 
-        fn get_f64(info: &Bound<'_, PyAny>, key: &str) -> Option<f64> {
-            info.get_item(key).ok().and_then(|v| {
-                if v.is_none() { None } else { v.extract().ok() }
-            })
-        }
-
-        // Extract fields from the info dict
-        let id: String = get_str(&info, "id").ok_or("No id field")?;
-        let title: String = get_str(&info, "title").ok_or("No title field")?;
-        let channel: Option<String> = get_str(&info, "channel");
-        let uploader: Option<String> = get_str(&info, "uploader");
-        let artist: Option<String> = get_str(&info, "artist");
-        let track: Option<String> = get_str(&info, "track");
-        let thumbnail: Option<String> = get_str(&info, "thumbnail");
-        let duration: Option<f64> = get_f64(&info, "duration");
-
-        Ok(YtDlpMetadata {
-            id,
-            title,
-            channel,
-            uploader,
-            artist,
-            track,
-            thumbnail,
-            duration,
-        })
+    Ok(YtDlpMetadata {
+        id: json["id"].as_str().unwrap_or("").to_string(),
+        title: json["title"].as_str().unwrap_or("Unknown").to_string(),
+        channel: json["channel"].as_str().map(|s| s.to_string()),
+        uploader: json["uploader"].as_str().map(|s| s.to_string()),
+        artist: json["artist"].as_str().map(|s| s.to_string()),
+        track: json["track"].as_str().map(|s| s.to_string()),
+        thumbnail: json["thumbnail"].as_str().map(|s| s.to_string()),
+        duration: json["duration"].as_f64(),
     })
 }
 
-/// Download audio using yt-dlp via PyO3
+/// Download audio using yt-dlp via subprocess
 fn ytdlp_download(url: &str, output_path: &str) -> Result<String, String> {
-    init_python_env();
-    Python::with_gil(|py| {
-        let yt_dlp = py.import("yt_dlp").map_err(|e| format!("Failed to import yt_dlp: {}", e))?;
+    let python_path = get_bundled_python_path()
+        .ok_or_else(|| "Python not found. Please install Python 3.".to_string())?;
 
-        // Create options dict
-        let opts = PyDict::new(py);
-        opts.set_item("quiet", true).unwrap();
-        opts.set_item("no_warnings", true).unwrap();
-        opts.set_item("noplaylist", true).unwrap();
-        opts.set_item("format", "bestaudio[ext=m4a]/bestaudio/best").unwrap();
-        opts.set_item("outtmpl", output_path).unwrap();
+    let mut args = vec![
+        "-m", "yt_dlp",
+        "--no-playlist",
+        "--no-warnings",
+        "-f", "bestaudio[ext=m4a]/bestaudio/best",
+        "-x", "--audio-format", "m4a",
+        "-o", output_path,
+    ];
 
-        // Set ffmpeg location if we have a bundled version
-        if let Some(ffmpeg_path) = get_ffmpeg_path() {
-            if let Some(ffmpeg_dir) = ffmpeg_path.parent() {
-                opts.set_item("ffmpeg_location", ffmpeg_dir.to_string_lossy().to_string()).unwrap();
-            }
+    // Add ffmpeg location if we have a bundled version
+    let ffmpeg_location;
+    if let Some(ffmpeg_path) = get_ffmpeg_path() {
+        if let Some(ffmpeg_dir) = ffmpeg_path.parent() {
+            ffmpeg_location = ffmpeg_dir.to_string_lossy().to_string();
+            args.push("--ffmpeg-location");
+            args.push(&ffmpeg_location);
         }
+    }
 
-        // Post-processors to extract audio
-        let pp_dict = PyDict::new(py);
-        pp_dict.set_item("key", "FFmpegExtractAudio").unwrap();
-        pp_dict.set_item("preferredcodec", "m4a").unwrap();
-        let pp_list = PyList::new(py, &[pp_dict]).map_err(|e| format!("Failed to create list: {}", e))?;
-        opts.set_item("postprocessors", pp_list).unwrap();
+    // Add the URL last
+    args.push(url);
 
-        // Create YoutubeDL instance
-        let ydl_class = yt_dlp.getattr("YoutubeDL").map_err(|e| format!("Failed to get YoutubeDL: {}", e))?;
-        let ydl = ydl_class.call1((opts,)).map_err(|e| format!("Failed to create YoutubeDL: {}", e))?;
+    let output = Command::new(&python_path)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
 
-        // Download
-        ydl.call_method1("download", (vec![url],))
-            .map_err(|e| format!("Failed to download: {}", e))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("yt-dlp download failed: {}", stderr));
+    }
 
-        Ok(output_path.to_string())
-    })
+    Ok(output_path.to_string())
 }
 
 fn clean_title(title: &str) -> String {
@@ -1433,15 +1384,19 @@ async fn download_audio_trimmed(
 /// Get current yt-dlp version
 #[tauri::command]
 async fn get_ytdlp_version() -> Result<String, String> {
-    init_python_env();
-    Python::with_gil(|py| {
-        let yt_dlp = py.import("yt_dlp").map_err(|e| format!("Failed to import yt_dlp: {}", e))?;
-        let version = yt_dlp.getattr("version")
-            .and_then(|v| v.getattr("__version__"))
-            .map_err(|_| "Failed to get version".to_string())?;
-        let version_str: String = version.extract().map_err(|e| format!("Failed to extract version: {}", e))?;
-        Ok(version_str)
-    })
+    let python_path = get_bundled_python_path()
+        .ok_or_else(|| "Python not found".to_string())?;
+
+    let output = Command::new(&python_path)
+        .args(["-m", "yt_dlp", "--version"])
+        .output()
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+
+    if !output.status.success() {
+        return Err("Failed to get yt-dlp version".to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 /// Check for yt-dlp updates by comparing with PyPI
@@ -1480,31 +1435,15 @@ async fn check_ytdlp_update() -> Result<Option<String>, String> {
 /// Update yt-dlp to latest version
 #[tauri::command]
 async fn update_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
-    use std::process::Command;
+    let python_path = get_bundled_python_path()
+        .ok_or_else(|| "Python not found".to_string())?;
 
     // Emit progress
     let _ = app.emit("ytdlp-update-progress", "Starting update...");
 
-    // Try to use bundled Python's pip first, fall back to system pip
-    let (pip_cmd, pip_args): (&str, Vec<&str>) = if let Some(resource_dir) = get_resource_dir() {
-        let python_dir = resource_dir.join("python");
-        let pip_path = python_dir.join("bin").join("pip3");
-        if pip_path.exists() {
-            // Use bundled Python's pip
-            let pip_str = pip_path.to_string_lossy().to_string();
-            // We need to leak this string because Command needs a &str that lives long enough
-            let pip_static: &'static str = Box::leak(pip_str.into_boxed_str());
-            (pip_static, vec!["install", "--upgrade", "yt-dlp"])
-        } else {
-            ("pip3", vec!["install", "--upgrade", "yt-dlp"])
-        }
-    } else {
-        ("pip3", vec!["install", "--upgrade", "yt-dlp"])
-    };
-
-    // Run pip install --upgrade yt-dlp
-    let output = Command::new(pip_cmd)
-        .args(&pip_args)
+    // Run: python -m pip install --upgrade yt-dlp
+    let output = Command::new(&python_path)
+        .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
 
