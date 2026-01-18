@@ -159,6 +159,42 @@ fn get_resource_dir() -> Option<PathBuf> {
 
     None
 }
+
+/// Get the path to the bundled ffmpeg binary
+fn get_ffmpeg_path() -> Option<PathBuf> {
+    let exe_path = std::env::current_exe().ok()?;
+
+    // Determine the target triple suffix based on the current platform
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let suffix = "aarch64-apple-darwin";
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    let suffix = "x86_64-apple-darwin";
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    let suffix = "x86_64-pc-windows-msvc.exe";
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let suffix = "x86_64-unknown-linux-gnu";
+
+    // In production macOS app bundle
+    if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
+        let ffmpeg_path = exe_path
+            .parent()? // MacOS
+            .join(format!("ffmpeg-{}", suffix));
+        if ffmpeg_path.exists() {
+            return Some(ffmpeg_path);
+        }
+    }
+
+    // Development mode: check in binaries folder
+    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries")
+        .join(format!("ffmpeg-{}", suffix));
+    if dev_path.exists() {
+        return Some(dev_path);
+    }
+
+    // Fall back to system ffmpeg
+    None
+}
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::formats::FormatOptions;
@@ -285,6 +321,13 @@ fn ytdlp_download(url: &str, output_path: &str) -> Result<String, String> {
         opts.set_item("noplaylist", true).unwrap();
         opts.set_item("format", "bestaudio[ext=m4a]/bestaudio/best").unwrap();
         opts.set_item("outtmpl", output_path).unwrap();
+
+        // Set ffmpeg location if we have a bundled version
+        if let Some(ffmpeg_path) = get_ffmpeg_path() {
+            if let Some(ffmpeg_dir) = ffmpeg_path.parent() {
+                opts.set_item("ffmpeg_location", ffmpeg_dir.to_string_lossy().to_string()).unwrap();
+            }
+        }
 
         // Post-processors to extract audio
         let pp_dict = PyDict::new(py);
@@ -1434,6 +1477,48 @@ async fn update_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
     get_ytdlp_version().await
 }
 
+/// Dependency check result
+#[derive(Debug, Clone, Serialize)]
+pub struct DependencyStatus {
+    pub ffmpeg_available: bool,
+    pub ffmpeg_path: Option<String>,
+    pub ffmpeg_bundled: bool,
+    pub ytdlp_available: bool,
+    pub ytdlp_version: Option<String>,
+}
+
+/// Check if all required dependencies are available
+#[tauri::command]
+async fn check_dependencies() -> Result<DependencyStatus, String> {
+    // Check ffmpeg
+    let ffmpeg_path = get_ffmpeg_path();
+    let ffmpeg_bundled = ffmpeg_path.is_some();
+
+    // If not bundled, check if ffmpeg is in PATH
+    let ffmpeg_available = if ffmpeg_bundled {
+        true
+    } else {
+        std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+
+    // Check yt-dlp
+    let ytdlp_result = get_ytdlp_version().await;
+    let ytdlp_available = ytdlp_result.is_ok();
+    let ytdlp_version = ytdlp_result.ok();
+
+    Ok(DependencyStatus {
+        ffmpeg_available,
+        ffmpeg_path: ffmpeg_path.map(|p| p.to_string_lossy().to_string()),
+        ffmpeg_bundled,
+        ytdlp_available,
+        ytdlp_version,
+    })
+}
+
 /// Convert M4A/AAC to MP3 with time trimming
 fn convert_to_mp3_trimmed(input_path: &Path, output_path: &Path, bitrate_kbps: u32, start_time: f64, end_time: f64) -> Result<(), String> {
     let file = File::open(input_path).map_err(|e| format!("Failed to open input file: {}", e))?;
@@ -1596,6 +1681,7 @@ pub fn run() {
             get_ytdlp_version,
             check_ytdlp_update,
             update_ytdlp,
+            check_dependencies,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
