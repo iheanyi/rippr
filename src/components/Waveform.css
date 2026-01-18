@@ -1,0 +1,42 @@
+.waveform-container {
+  --waveform-color: #3b82f6;
+  --waveform-bg: #f5f5f5;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--waveform-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.waveform-canvas {
+  display: block;
+}
+
+.waveform-loading,
+.waveform-error {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+}
+
+.waveform-error {
+  color: #dc2626;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .waveform-container {
+    --waveform-color: #60a5fa;
+    --waveform-bg: #333;
+  }
+
+  .waveform-loading,
+  .waveform-error {
+    color: #a3a3a3;
+  }
+
+  .waveform-error {
+    color: #fca5a5;
+  }
+}

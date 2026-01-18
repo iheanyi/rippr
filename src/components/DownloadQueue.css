@@ -1,0 +1,400 @@
+.queue-panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.queue-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.queue-add-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.queue-add-section textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.queue-add-section textarea:focus {
+  outline: none;
+  border-color: #333;
+}
+
+.queue-add-section button {
+  align-self: flex-end;
+  padding: 10px 20px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.queue-add-section button:hover:not(:disabled) {
+  background: #555;
+}
+
+.queue-add-section button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.queue-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.queue-stats .failed {
+  color: #dc2626;
+}
+
+.queue-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.download-all-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.download-all-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.download-all-btn:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.clear-btn {
+  padding: 12px 16px;
+  background: transparent;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.queue-item.status-complete {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.queue-item.status-failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.queue-item.status-downloading {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.queue-item-main {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.queue-thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-artist {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.queue-item-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.status-icon {
+  font-size: 12px;
+}
+
+.queue-item-error {
+  font-size: 12px;
+  color: #dc2626;
+  margin-top: 4px;
+}
+
+.queue-progress-bar {
+  height: 4px;
+  background: #e5e5e5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.queue-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.queue-item-actions {
+  display: flex;
+  gap: 4px;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+.queue-item {
+  position: relative;
+}
+
+.download-single-btn,
+.remove-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.download-single-btn:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.remove-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.download-single-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.queue-empty {
+  text-align: center;
+  padding: 32px;
+  color: #666;
+}
+
+.queue-empty p {
+  margin: 0;
+}
+
+.queue-empty .hint {
+  font-size: 13px;
+  margin-top: 8px;
+  color: #999;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .queue-panel {
+    background: #262626;
+    border-color: #404040;
+  }
+
+  .close-btn {
+    color: #a3a3a3;
+  }
+
+  .close-btn:hover {
+    background: #333;
+    color: #e5e5e5;
+  }
+
+  .queue-add-section textarea {
+    background: #333;
+    border-color: #404040;
+    color: #e5e5e5;
+  }
+
+  .queue-add-section textarea:focus {
+    border-color: #666;
+  }
+
+  .queue-add-section button {
+    background: #e5e5e5;
+    color: #1a1a1a;
+  }
+
+  .queue-add-section button:hover:not(:disabled) {
+    background: #fff;
+  }
+
+  .queue-add-section button:disabled {
+    background: #404040;
+    color: #666;
+  }
+
+  .queue-stats {
+    color: #a3a3a3;
+  }
+
+  .clear-btn {
+    border-color: #404040;
+    color: #e5e5e5;
+  }
+
+  .clear-btn:hover {
+    background: #333;
+  }
+
+  .queue-item {
+    background: #333;
+    border-color: #404040;
+  }
+
+  .queue-item.status-complete {
+    background: #1a2e1a;
+    border-color: #2d5a2d;
+  }
+
+  .queue-item.status-failed {
+    background: #2e1a1a;
+    border-color: #5a2d2d;
+  }
+
+  .queue-item.status-downloading {
+    background: #1a2640;
+    border-color: #2d4a6d;
+  }
+
+  .queue-item-artist {
+    color: #a3a3a3;
+  }
+
+  .queue-item-status {
+    color: #a3a3a3;
+  }
+
+  .queue-item-error {
+    color: #fca5a5;
+  }
+
+  .queue-progress-bar {
+    background: #404040;
+  }
+
+  .download-single-btn:hover:not(:disabled) {
+    background: #1a2640;
+  }
+
+  .remove-btn:hover {
+    background: #2e1a1a;
+    color: #fca5a5;
+  }
+
+  .queue-empty {
+    color: #a3a3a3;
+  }
+
+  .queue-empty .hint {
+    color: #666;
+  }
+}

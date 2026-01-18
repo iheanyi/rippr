@@ -1,0 +1,413 @@
+.history-panel {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.history-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.history-panel .close-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-panel .close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.history-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.history-search input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.history-search input:focus {
+  outline: none;
+  border-color: #333;
+}
+
+.history-search button {
+  padding: 10px 16px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.history-search button:hover {
+  background: #555;
+}
+
+.history-search .clear-search {
+  background: transparent;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.history-search .clear-search:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.history-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.history-count {
+  color: #666;
+}
+
+.clear-all-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid #dc2626;
+  color: #dc2626;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-all-btn:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.history-loading {
+  text-align: center;
+  padding: 32px;
+  color: #666;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  position: relative;
+}
+
+.history-thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.history-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-artist {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.history-item-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.history-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.history-analysis {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.analysis-bpm,
+.analysis-key {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.analysis-bpm {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.analysis-key {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.analyze-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  background: #f3f4f6;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.analyze-btn:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+
+.analyze-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.waveform-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: bold;
+  background: #f3f4f6;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.waveform-btn:hover {
+  background: #e5e5e5;
+}
+
+.waveform-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.history-waveform {
+  margin-top: 8px;
+}
+
+.reveal-btn,
+.delete-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reveal-btn:hover {
+  background: #e5e5e5;
+}
+
+.delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 32px;
+  color: #666;
+}
+
+.history-empty p {
+  margin: 0;
+}
+
+.history-empty .hint {
+  font-size: 13px;
+  margin-top: 8px;
+  color: #999;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .history-panel {
+    background: #262626;
+    border-color: #404040;
+  }
+
+  .history-panel .close-btn {
+    color: #a3a3a3;
+  }
+
+  .history-panel .close-btn:hover {
+    background: #333;
+    color: #e5e5e5;
+  }
+
+  .history-search input {
+    background: #333;
+    border-color: #404040;
+    color: #e5e5e5;
+  }
+
+  .history-search input:focus {
+    border-color: #666;
+  }
+
+  .history-search button {
+    background: #e5e5e5;
+    color: #1a1a1a;
+  }
+
+  .history-search button:hover {
+    background: #fff;
+  }
+
+  .history-search .clear-search {
+    background: transparent;
+    border-color: #404040;
+    color: #a3a3a3;
+  }
+
+  .history-search .clear-search:hover {
+    background: #333;
+  }
+
+  .history-count {
+    color: #a3a3a3;
+  }
+
+  .clear-all-btn {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+
+  .clear-all-btn:hover {
+    background: #ef4444;
+    color: #fff;
+  }
+
+  .history-loading {
+    color: #a3a3a3;
+  }
+
+  .history-item {
+    background: #333;
+    border-color: #404040;
+  }
+
+  .analysis-bpm {
+    background: #1e3a5f;
+    color: #60a5fa;
+  }
+
+  .analysis-key {
+    background: #14532d;
+    color: #86efac;
+  }
+
+  .analyze-btn {
+    background: #404040;
+    border-color: #555;
+    color: #e5e5e5;
+  }
+
+  .analyze-btn:hover:not(:disabled) {
+    background: #555;
+  }
+
+  .waveform-btn {
+    background: #404040;
+    border-color: #555;
+    color: #e5e5e5;
+  }
+
+  .waveform-btn:hover {
+    background: #555;
+  }
+
+  .waveform-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+  }
+
+  .history-item-artist {
+    color: #a3a3a3;
+  }
+
+  .history-item-meta {
+    color: #666;
+  }
+
+  .reveal-btn:hover {
+    background: #404040;
+  }
+
+  .delete-btn:hover {
+    background: #2e1a1a;
+    color: #fca5a5;
+  }
+
+  .history-empty {
+    color: #a3a3a3;
+  }
+
+  .history-empty .hint {
+    color: #666;
+  }
+}
