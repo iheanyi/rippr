@@ -24,7 +24,7 @@ Download the latest release for your platform from the [Releases](https://github
 **Prerequisites:**
 - Node.js 18+
 - Rust 1.70+
-- Python 3.8+ with pip (for yt-dlp)
+- Python 3.8+ with yt-dlp (`pip install yt-dlp`)
 
 ```bash
 # Clone the repo
@@ -37,12 +37,17 @@ npm install
 # Install yt-dlp
 pip install yt-dlp
 
+# Download ffmpeg binaries for bundling
+./scripts/download-ffmpeg.sh
+
 # Run in development
 npm run tauri dev
 
 # Build for production
 npm run tauri build
 ```
+
+**Note:** ffmpeg is bundled with the release builds - users don't need to install it separately.
 
 ## Tech Stack
 
