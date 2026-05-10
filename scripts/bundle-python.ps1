@@ -85,10 +85,20 @@ if (-not $UpdateYtDlp) {
 
 Write-Host "Installing yt-dlp..."
 & $PythonExe -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to upgrade pip."
+}
+
 & $PythonExe -m pip install --upgrade yt-dlp
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to install yt-dlp."
+}
 
 Write-Host "Verifying yt-dlp installation..."
 & $PythonExe -c "import yt_dlp; print(f'yt-dlp version: {yt_dlp.version.__version__}')"
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to verify yt-dlp installation."
+}
 
 Write-Host ""
 Write-Host "Python bundling complete!"
