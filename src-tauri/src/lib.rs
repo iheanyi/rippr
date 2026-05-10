@@ -179,7 +179,13 @@ fn get_bundled_python_path() -> Option<PathBuf> {
     };
 
     for command in fallback_commands {
-        if hidden_command(command).arg("--version").output().is_ok() {
+        let python_works = hidden_command(command)
+            .arg("--version")
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false);
+
+        if python_works {
             println!("Using system Python command: {}", command);
             return Some(PathBuf::from(command));
         }
