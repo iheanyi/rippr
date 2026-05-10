@@ -1,0 +1,323 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build, such as v0.1.2"
+        required: true
+        type: string
+      draft:
+        description: "Create the GitHub release as a draft"
+        default: true
+        required: true
+        type: boolean
+      prerelease:
+        description: "Mark the GitHub release as a prerelease"
+        default: false
+        required: true
+        type: boolean
+      publish_homebrew:
+        description: "Update the configured Homebrew tap after publishing"
+        default: false
+        required: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  validate:
+    name: Validate release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      draft: ${{ steps.release.outputs.draft }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+      publish_homebrew: ${{ steps.release.outputs.publish_homebrew }}
+
+    steps:
+      - name: Resolve release inputs
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+          INPUT_PUBLISH_HOMEBREW: ${{ inputs.publish_homebrew }}
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
+            draft="${INPUT_DRAFT:-true}"
+            prerelease="${INPUT_PRERELEASE:-false}"
+            publish_homebrew="${INPUT_PUBLISH_HOMEBREW:-false}"
+          else
+            tag="$GITHUB_REF_NAME"
+            draft="false"
+            prerelease="false"
+            publish_homebrew="false"
+          fi
+
+          version="${tag#v}"
+
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "draft=$draft"
+            echo "prerelease=$prerelease"
+            echo "publish_homebrew=$publish_homebrew"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.release.outputs.tag }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify checked-in versions
+        run: node scripts/verify-release-version.js ${{ steps.release.outputs.tag }}
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            asset_suffix: windows-x64
+            bundles: msi,nsis
+          - name: macOS Apple Silicon
+            os: macos-15
+            asset_suffix: macos-arm64
+            bundles: dmg
+          - name: macOS Intel
+            os: macos-15-intel
+            asset_suffix: macos-x64
+            bundles: dmg
+          - name: Linux x64
+            os: ubuntu-24.04
+            asset_suffix: linux-x64
+            bundles: deb,appimage
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+            asset_suffix: linux-arm64
+            bundles: deb,appimage
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ matrix.asset_suffix }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.asset_suffix }}-cargo-
+
+      - name: Cache bundled tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/resources/python
+            src-tauri/binaries
+          key: ${{ matrix.asset_suffix }}-bundled-tools-${{ hashFiles('package-lock.json', 'scripts/bundle-python.*', 'scripts/download-ffmpeg.*') }}
+          restore-keys: |
+            ${{ matrix.asset_suffix }}-bundled-tools-
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Bundle Python
+        run: npm run bundle-python
+
+      - name: Bundle ffmpeg
+        run: npm run bundle-ffmpeg
+
+      - name: Build installers
+        run: npm run tauri build -- --ci --no-sign --config src-tauri/tauri.release.conf.json --bundles ${{ matrix.bundles }}
+
+      - name: Build Windows portable ZIP
+        if: runner.os == 'Windows'
+        run: npm run bundle-portable
+
+      - name: Stage release assets
+        run: node scripts/stage-release-assets.js ${{ matrix.asset_suffix }}
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: rippr-${{ matrix.asset_suffix }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-github-release:
+    name: Publish GitHub release
+    needs:
+      - validate
+      - build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          DRAFT: ${{ needs.validate.outputs.draft }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t files < <(find release-assets -type f | sort)
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release assets were downloaded."
+            exit 1
+          fi
+
+          release_args=(--title "Rippr $VERSION" --generate-notes)
+
+          if [ "$DRAFT" = "true" ]; then
+            release_args+=(--draft)
+          fi
+
+          if [ "$PRERELEASE" = "true" ]; then
+            release_args+=(--prerelease)
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            gh release create "$TAG" "${files[@]}" "${release_args[@]}"
+          fi
+
+  update-homebrew:
+    name: Update Homebrew tap
+    needs:
+      - validate
+      - publish-github-release
+    if: ${{ needs.validate.outputs.publish_homebrew == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate Homebrew configuration
+        shell: bash
+        env:
+          HOMEBREW_TAP_REPOSITORY: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$HOMEBREW_TAP_REPOSITORY" ]; then
+            echo "Set the HOMEBREW_TAP_REPOSITORY repository variable, for example iheanyi/homebrew-rippr."
+            exit 1
+          fi
+
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "Set the HOMEBREW_TAP_TOKEN secret with write access to the Homebrew tap repository."
+            exit 1
+          fi
+
+      - name: Checkout Rippr
+        uses: actions/checkout@v4
+        with:
+          path: source
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HOMEBREW_TAP_REPOSITORY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate cask
+        env:
+          HOMEBREW_CASK_PATH: ${{ vars.HOMEBREW_CASK_PATH || 'Casks/rippr.rb' }}
+        run: |
+          node source/scripts/generate-homebrew-cask.js \
+            --artifacts release-assets \
+            --version ${{ needs.validate.outputs.version }} \
+            --tag ${{ needs.validate.outputs.tag }} \
+            --repo ${{ github.repository }} \
+            --output "homebrew-tap/$HOMEBREW_CASK_PATH"
+
+      - name: Commit and push cask
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+
+          if git diff --cached --quiet; then
+            echo "Homebrew tap is already up to date."
+            exit 0
+          fi
+
+          git commit -m "Update Rippr to $VERSION"
+          git push
