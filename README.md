@@ -81,6 +81,24 @@ The `bundle-python` and `bundle-ffmpeg` commands run native PowerShell scripts o
 
 On Windows, `build:portable` is the fastest way to create a portable ZIP for testing because it skips MSI and NSIS installer packaging. `build:release` still creates installers and a portable ZIP at `src-tauri/target/release/bundle/portable/Rippr_<version>_<arch>-portable.zip`. Users can unzip it and run `rippr.exe` without installing.
 
+## Releasing
+
+Releases are built by the GitHub Actions release workflow when a version tag is pushed. The tag must match the checked-in versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`.
+
+```bash
+npm version 0.1.2 --no-git-tag-version
+# Update src-tauri/tauri.conf.json and src-tauri/Cargo.toml to the same version.
+git commit -am "Release v0.1.2"
+git tag v0.1.2
+git push origin main v0.1.2
+```
+
+The workflow publishes a GitHub Release with Windows MSI, Windows NSIS, Windows portable ZIP, macOS Apple Silicon DMG, macOS Intel DMG, Linux DEB, and Linux AppImage assets. Release artifacts are unsigned by default so the workflow can run without Apple Developer ID or Windows code-signing secrets.
+
+The release workflow can also be started manually from GitHub Actions for an existing tag. Manual runs default to draft releases so assets can be inspected before publishing.
+
+Homebrew publishing is optional. To enable it, create a tap repository such as `iheanyi/homebrew-rippr`, add a repository variable named `HOMEBREW_TAP_REPOSITORY`, add a `HOMEBREW_TAP_TOKEN` secret with write access to that tap, and run the release workflow with `publish_homebrew` enabled. The generated cask uses the macOS DMG release assets and writes to `Casks/rippr.rb` unless `HOMEBREW_CASK_PATH` is set.
+
 ## Tech Stack
 
 - **Frontend**: React + TypeScript + Vite

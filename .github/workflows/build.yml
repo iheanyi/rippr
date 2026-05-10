@@ -6,7 +6,6 @@ on:
     branches:
       - main
       - master
-      - windows-portable-support
 
 jobs:
   build:
@@ -45,6 +44,16 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
+      - name: Cache bundled tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/resources/python
+            src-tauri/binaries
+          key: ${{ runner.os }}-${{ runner.arch }}-bundled-tools-${{ hashFiles('package-lock.json', 'scripts/bundle-python.*', 'scripts/download-ffmpeg.*') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-bundled-tools-
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
