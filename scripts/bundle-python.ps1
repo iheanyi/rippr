@@ -53,9 +53,27 @@ if (-not (Test-Path -LiteralPath $PythonExe)) {
 }
 
 if (-not $UpdateYtDlp) {
-  $YtDlpVersion = & $PythonExe -c "import yt_dlp; print(yt_dlp.version.__version__)" 2>$null
+  $HadNativeCommandPreference = $null -ne (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue)
+  if ($HadNativeCommandPreference) {
+    $PreviousNativeCommandPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+  }
 
-  if ($LASTEXITCODE -eq 0 -and $YtDlpVersion) {
+  try {
+    $YtDlpVersion = & $PythonExe -c "import yt_dlp; print(yt_dlp.version.__version__)" 2>$null
+    $YtDlpStatus = $LASTEXITCODE
+  }
+  catch {
+    $YtDlpVersion = $null
+    $YtDlpStatus = 1
+  }
+  finally {
+    if ($HadNativeCommandPreference) {
+      $PSNativeCommandUseErrorActionPreference = $PreviousNativeCommandPreference
+    }
+  }
+
+  if ($YtDlpStatus -eq 0 -and $YtDlpVersion) {
     Write-Host "yt-dlp already installed: $YtDlpVersion"
     Write-Host "Set RIPPR_UPDATE_YTDLP=1 to update it."
     Write-Host ""
