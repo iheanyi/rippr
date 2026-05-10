@@ -1,9 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function parseArgs(args) {
   const parsed = {};
@@ -65,11 +62,11 @@ function makeUrl(repo, tag, fileName) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const artifactsDir = path.resolve(root, args.artifacts || "release-assets");
+const artifactsDir = path.resolve(process.cwd(), args.artifacts || "release-assets");
 const version = args.version;
 const tag = args.tag || (version ? `v${version}` : "");
 const repo = args.repo || "iheanyi/rippr";
-const output = path.resolve(root, args.output || path.join("dist", "homebrew", "rippr.rb"));
+const output = path.resolve(process.cwd(), args.output || path.join("dist", "homebrew", "rippr.rb"));
 
 if (!version) {
   fail("Missing --version.");
