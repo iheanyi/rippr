@@ -25,6 +25,10 @@ case "$(uname -s)-$(uname -m)" in
         PLATFORM="x86_64-unknown-linux-gnu"
         PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${RELEASE_DATE}/cpython-${PYTHON_VERSION}+${RELEASE_DATE}-${PLATFORM}-install_only.tar.gz"
         ;;
+    Linux-aarch64|Linux-arm64)
+        PLATFORM="aarch64-unknown-linux-gnu"
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${RELEASE_DATE}/cpython-${PYTHON_VERSION}+${RELEASE_DATE}-${PLATFORM}-install_only.tar.gz"
+        ;;
     *)
         echo "Unsupported platform: $(uname -s)-$(uname -m)"
         exit 1
@@ -61,10 +65,25 @@ if [ ! -f "$PYTHON_BIN" ]; then
     exit 1
 fi
 
+if [ "${RIPPR_UPDATE_YTDLP:-}" != "1" ]; then
+    if YTDLP_VERSION=$("$PYTHON_BIN" -c "import yt_dlp; print(yt_dlp.version.__version__)" 2>/dev/null); then
+        echo "yt-dlp already installed: $YTDLP_VERSION"
+        echo "Set RIPPR_UPDATE_YTDLP=1 to update it."
+        echo ""
+        echo "Python bundling complete!"
+        echo "Bundled Python location: $PYTHON_DIR"
+        echo ""
+        echo "To use this in development, set these environment variables:"
+        echo "  export PYTHONHOME=$PYTHON_DIR"
+        echo "  export PYTHONPATH=$PYTHON_DIR/lib/python3.13"
+        exit 0
+    fi
+fi
+
 # Install yt-dlp
 echo "Installing yt-dlp..."
 "$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install yt-dlp
+"$PYTHON_BIN" -m pip install --upgrade yt-dlp
 
 # Verify installation
 echo "Verifying yt-dlp installation..."

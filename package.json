@@ -8,8 +8,13 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "bundle-python": "bash scripts/bundle-python.sh",
-    "build:release": "npm run bundle-python && npm run tauri build -- --config src-tauri/tauri.release.conf.json"
+    "bundle-python": "node scripts/bundle-python.js",
+    "bundle-ffmpeg": "node scripts/download-ffmpeg.js",
+    "bundle-portable": "node scripts/package-portable.js",
+    "build:fast": "npm run build && cargo build --release --manifest-path src-tauri/Cargo.toml",
+    "build:portable": "npm run bundle-python && npm run bundle-ffmpeg && npm run build:fast && npm run bundle-portable",
+    "build:installers": "npm run bundle-python && npm run bundle-ffmpeg && npm run tauri build -- --config src-tauri/tauri.release.conf.json",
+    "build:release": "npm run build:installers && npm run bundle-portable"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
