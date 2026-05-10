@@ -96,103 +96,156 @@ impl std::fmt::Display for DownloadError {
     }
 }
 
-/// Get the path to the bundled Python binary
-fn get_bundled_python_path() -> Option<PathBuf> {
-    // Try to find bundled Python in the app resources
-    if let Some(resource_dir) = get_resource_dir() {
-        // In production, Tauri puts resources in a 'resources' subdirectory
-        let python_dir = {
-            let nested_path = resource_dir.join("resources").join("python");
-            if nested_path.exists() {
-                nested_path
-            } else {
-                resource_dir.join("python")
+fn hidden_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    let mut command = Command::new(program);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    command
+}
+
+fn push_existing_dir(dirs: &mut Vec<PathBuf>, path: PathBuf) {
+    if path.exists() && !dirs.iter().any(|dir| dir == &path) {
+        dirs.push(path);
+    }
+}
+
+/// Get possible app resource directories across development and bundled layouts.
+fn get_resource_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            push_existing_dir(&mut dirs, exe_dir.to_path_buf());
+            push_existing_dir(&mut dirs, exe_dir.join("resources"));
+
+            // macOS app bundle: App.app/Contents/Resources
+            if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
+                if let Some(contents_dir) = exe_dir.parent() {
+                    push_existing_dir(&mut dirs, contents_dir.join("Resources"));
+                }
             }
-        };
-
-        let python_bin = python_dir.join("bin").join("python3");
-        if python_bin.exists() {
-            println!("Using bundled Python from: {:?}", python_bin);
-            return Some(python_bin);
         }
     }
 
-    // Fall back: check if python3 is in PATH (for development)
-    if Command::new("python3").arg("--version").output().is_ok() {
-        println!("Using system Python");
-        return Some(PathBuf::from("python3"));
+    // Development mode: src-tauri/resources
+    push_existing_dir(
+        &mut dirs,
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources"),
+    );
+
+    dirs
+}
+
+fn bundled_python_bin_candidates(python_dir: &Path) -> Vec<PathBuf> {
+    let rel_paths = if cfg!(windows) {
+        vec!["python.exe", "bin/python.exe"]
+    } else {
+        vec!["bin/python3", "bin/python", "python3"]
+    };
+
+    rel_paths
+        .into_iter()
+        .map(|rel_path| python_dir.join(rel_path))
+        .collect()
+}
+
+/// Get the path to the bundled Python binary.
+fn get_bundled_python_path() -> Option<PathBuf> {
+    for resource_dir in get_resource_dirs() {
+        for python_dir in [
+            resource_dir.join("resources").join("python"),
+            resource_dir.join("python"),
+        ] {
+            for python_bin in bundled_python_bin_candidates(&python_dir) {
+                if python_bin.exists() {
+                    println!("Using bundled Python from: {:?}", python_bin);
+                    return Some(python_bin);
+                }
+            }
+        }
+    }
+
+    // Fall back to a system Python for development.
+    let fallback_commands = if cfg!(windows) {
+        vec!["python", "python3", "py"]
+    } else {
+        vec!["python3", "python"]
+    };
+
+    for command in fallback_commands {
+        if hidden_command(command).arg("--version").output().is_ok() {
+            println!("Using system Python command: {}", command);
+            return Some(PathBuf::from(command));
+        }
     }
 
     None
 }
 
-/// Get the app's resource directory
-fn get_resource_dir() -> Option<PathBuf> {
-    // In production macOS app bundle: App.app/Contents/Resources
-    // In development: src-tauri/resources
-
-    let exe_path = std::env::current_exe().ok()?;
-
-    // Check if we're in an app bundle (macOS)
-    if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
-        // We're in an app bundle
-        let resources = exe_path
-            .parent()? // MacOS
-            .parent()? // Contents
-            .join("Resources");
-        if resources.exists() {
-            return Some(resources);
-        }
+fn tauri_target_triple() -> Option<&'static str> {
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        Some("aarch64-apple-darwin")
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        Some("x86_64-apple-darwin")
+    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        Some("x86_64-pc-windows-msvc")
+    } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
+        Some("aarch64-pc-windows-msvc")
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        Some("x86_64-unknown-linux-gnu")
+    } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+        Some("aarch64-unknown-linux-gnu")
+    } else {
+        None
     }
-
-    // Development mode: check for resources in src-tauri
-    let dev_resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
-    if dev_resources.exists() {
-        return Some(dev_resources);
-    }
-
-    None
 }
 
-/// Get the path to the bundled ffmpeg binary
+/// Get the path to the bundled ffmpeg binary.
 fn get_ffmpeg_path() -> Option<PathBuf> {
-    let exe_path = std::env::current_exe().ok()?;
-
-    // Determine the target triple suffix based on the current platform (for dev mode)
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    let suffix = "aarch64-apple-darwin";
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    let suffix = "x86_64-apple-darwin";
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let suffix = "x86_64-pc-windows-msvc.exe";
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let suffix = "x86_64-unknown-linux-gnu";
-
-    // In production macOS app bundle - Tauri strips the suffix when bundling
-    if exe_path.to_string_lossy().contains(".app/Contents/MacOS") {
-        let macos_dir = exe_path.parent()?;
-        // Try without suffix first (how Tauri bundles it)
-        let ffmpeg_path = macos_dir.join("ffmpeg");
-        if ffmpeg_path.exists() {
-            return Some(ffmpeg_path);
+    let exe_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+    let suffixed_name = tauri_target_triple().map(|triple| {
+        if cfg!(windows) {
+            format!("ffmpeg-{}.exe", triple)
+        } else {
+            format!("ffmpeg-{}", triple)
         }
-        // Fall back to with suffix (just in case)
-        let ffmpeg_path = macos_dir.join(format!("ffmpeg-{}", suffix));
-        if ffmpeg_path.exists() {
-            return Some(ffmpeg_path);
+    });
+
+    let mut candidates = Vec::new();
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.join(exe_name));
+            if let Some(ref name) = suffixed_name {
+                candidates.push(exe_dir.join(name));
+            }
         }
     }
 
-    // Development mode: check in binaries folder (with suffix)
-    let dev_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("binaries")
-        .join(format!("ffmpeg-{}", suffix));
-    if dev_path.exists() {
-        return Some(dev_path);
+    for resource_dir in get_resource_dirs() {
+        candidates.push(resource_dir.join(exe_name));
+        candidates.push(resource_dir.join("binaries").join(exe_name));
+        if let Some(ref name) = suffixed_name {
+            candidates.push(resource_dir.join(name));
+            candidates.push(resource_dir.join("binaries").join(name));
+        }
     }
 
-    // Fall back to system ffmpeg
-    None
+    if let Some(ref name) = suffixed_name {
+        candidates.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("binaries")
+                .join(name),
+        );
+    }
+
+    candidates.into_iter().find(|path| path.exists())
 }
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
@@ -256,7 +309,7 @@ fn ytdlp_extract_info(url: &str) -> Result<YtDlpMetadata, String> {
         .ok_or_else(|| "Python not found. Please install Python 3.".to_string())?;
 
     // Run: python -m yt_dlp -j --no-playlist URL
-    let output = Command::new(&python_path)
+    let output = hidden_command(&python_path)
         .args(["-m", "yt_dlp", "-j", "--no-playlist", "--no-warnings", url])
         .output()
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
@@ -311,7 +364,7 @@ fn ytdlp_download(url: &str, output_path: &str) -> Result<String, String> {
     // Add the URL last
     args.push(url);
 
-    let output = Command::new(&python_path)
+    let output = hidden_command(&python_path)
         .args(&args)
         .output()
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
@@ -1387,7 +1440,7 @@ async fn get_ytdlp_version() -> Result<String, String> {
     let python_path = get_bundled_python_path()
         .ok_or_else(|| "Python not found".to_string())?;
 
-    let output = Command::new(&python_path)
+    let output = hidden_command(&python_path)
         .args(["-m", "yt_dlp", "--version"])
         .output()
         .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
@@ -1442,7 +1495,7 @@ async fn update_ytdlp(app: tauri::AppHandle) -> Result<String, String> {
     let _ = app.emit("ytdlp-update-progress", "Starting update...");
 
     // Run: python -m pip install --upgrade yt-dlp
-    let output = Command::new(&python_path)
+    let output = hidden_command(&python_path)
         .args(["-m", "pip", "install", "--upgrade", "yt-dlp"])
         .output()
         .map_err(|e| format!("Failed to run pip: {}", e))?;
@@ -1479,7 +1532,7 @@ async fn check_dependencies() -> Result<DependencyStatus, String> {
     let ffmpeg_available = if ffmpeg_bundled {
         true
     } else {
-        std::process::Command::new("ffmpeg")
+        hidden_command("ffmpeg")
             .arg("-version")
             .output()
             .map(|o| o.status.success())

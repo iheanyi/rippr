@@ -52,19 +52,34 @@ cd rippr
 npm install
 
 # Bundle Python with yt-dlp (one-time setup)
-./scripts/bundle-python.sh
+npm run bundle-python
 
 # Download ffmpeg binaries for bundling
-./scripts/download-ffmpeg.sh
+npm run bundle-ffmpeg
 
 # Run in development
 npm run tauri dev
 
-# Build for production
-npm run tauri build
+# Fast release compile without installer packaging
+npm run build:fast
+
+# Build a portable Windows ZIP without installer packaging
+npm run build:portable
+
+# Build platform installers
+npm run build:installers
+
+# Build installers and the portable ZIP
+npm run build:release
 ```
 
 **Note:** Release builds are fully self-contained - Python, yt-dlp, and ffmpeg are all bundled.
+
+The `bundle-python` and `bundle-ffmpeg` commands run native PowerShell scripts on Windows, so WSL is not required.
+
+`bundle-python` and `bundle-ffmpeg` reuse existing assets on repeat builds. Set `RIPPR_UPDATE_YTDLP=1` to refresh yt-dlp or `RIPPR_FORCE_FFMPEG=1` to refresh ffmpeg. Windows and Linux builds download LGPL-flavored ffmpeg binaries; those generated binaries are intentionally not committed to the repository.
+
+On Windows, `build:portable` is the fastest way to create a portable ZIP for testing because it skips MSI and NSIS installer packaging. `build:release` still creates installers and a portable ZIP at `src-tauri/target/release/bundle/portable/Rippr_<version>_<arch>-portable.zip`. Users can unzip it and run `rippr.exe` without installing.
 
 ## Tech Stack
 
